@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { jobBadges } from '@/lib/job'
+import { strengthInfo } from '@/lib/match-strength'
 import type { MatchVerdict } from '@/lib/matches'
 import type { Post } from '@/lib/store'
 import { TrackedLink } from './tracked-link'
@@ -21,6 +22,7 @@ export function MatchSummary({
   otherPosts: number
 }) {
   const job = verdict.job ?? { title: 'Vaga' }
+  const strength = strengthInfo(verdict.strength)
 
   return (
     <div className="mb-4 border-b pb-4">
@@ -54,15 +56,16 @@ export function MatchSummary({
         </div>
       </div>
 
-      {jobBadges(job).length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {jobBadges(job).map(({ field, value }) => (
-            <Badge key={field} variant="secondary">
-              {value}
-            </Badge>
-          ))}
-        </div>
-      )}
+      <div className="mt-2 flex flex-wrap gap-1">
+        <Badge title={strength.hint} className={strength.className}>
+          {strength.badge}
+        </Badge>
+        {jobBadges(job).map(({ field, value }) => (
+          <Badge key={field} variant="secondary">
+            {value}
+          </Badge>
+        ))}
+      </div>
 
       {otherPosts > 0 && (
         <p className="mt-2 text-xs text-muted-foreground">

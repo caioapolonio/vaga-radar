@@ -44,5 +44,3 @@ next-env.d.ts
 # local data: posts, profile, keys and résumés
 /data
 
-# local tool settings (Claude Code preview config)
-/.claude

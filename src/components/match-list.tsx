@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { Presence } from '@/lib/feed-filters'
+import { formatDayHeading } from '@/lib/format'
 import {
   jobLevels,
   jobRegions,
@@ -14,6 +15,7 @@ import {
   WORK_MODELS,
   type Region,
 } from '@/lib/job'
+import { STRENGTHS } from '@/lib/match-strength'
 import type { MatchVerdict } from '@/lib/matches'
 import type { Post } from '@/lib/store'
 import { foldText, hasTerms, queryTerms } from '@/lib/text-search'
@@ -33,34 +35,39 @@ export type MatchJob = {
   // Other posts about the same job
   others: number
   hasEmailCard: boolean
-  applied: boolean
+  status: JobStatus
 }
 
-// Ordered best first; the AI rates each match
-const SECTIONS = [
+// From the marks on the job's posts: applied wins over seen
+export type JobStatus = 'open' | 'seen' | 'applied'
+
+const STATUS_TABS: { value: JobStatus; label: string; empty: string }[] = [
+  { value: 'open', label: 'Para aplicar', empty: '' },
   {
-    strength: 3,
-    title: 'Combinam forte',
-    tab: 'Fortes',
-    hint: 'Nível e stack confirmados pelo post.',
+    value: 'seen',
+    label: 'Já vistas',
+    empty: 'Nenhuma vaga marcada como vista.',
   },
   {
-    strength: 2,
-    title: 'Boas, com uma ressalva',
-    tab: 'Boas',
-    hint: 'Falta um dado no post ou algum requisito fica no limite.',
+    value: 'applied',
+    label: 'Já aplicadas',
+    empty: 'Nenhuma vaga aplicada ainda.',
   },
-  {
-    strength: 1,
-    title: 'Na dúvida',
-    tab: 'Na dúvida',
-    hint: 'O post não diz a stack ou o nível: confira no link antes.',
-  },
-] as const
+]
+
+// Jobs arrive newest first, so each day's group is contiguous
+const groupByDay = <T extends { post: Post }>(jobs: T[]) =>
+  jobs.reduce<{ heading: string; jobs: T[] }[]>((groups, job) => {
+    const heading = formatDayHeading(job.post.postedAt)
+    const last = groups.at(-1)
+    if (last?.heading === heading) last.jobs.push(job)
+    else groups.push({ heading, jobs: [job] })
+    return groups
+  }, [])
 
 type Filters = {
   q: string
-  status: 'open' | 'applied'
+  status: JobStatus
   strength: 'all' | '3' | '2' | '1'
   level: 'all' | keyof typeof LEVELS
   workModel: 'all' | keyof typeof WORK_MODELS
@@ -142,7 +149,7 @@ export function MatchList({
   // Every filter but `skip`, so each option can show how many jobs it leaves
   const passes = (job: Indexed, skip?: keyof Filters) =>
     (skip === 'q' || hasTerms(job.text, terms)) &&
-    (skip === 'status' || job.applied === (filters.status === 'applied')) &&
+    (skip === 'status' || job.status === filters.status) &&
     (skip === 'strength' ||
       filters.strength === 'all' ||
       job.strength === filters.strength) &&
@@ -163,9 +170,7 @@ export function MatchList({
     indexed.filter((job) => passes(job, skip) && belongs(job)).length
 
   const visible = indexed.filter((job) => passes(job))
-  const inStatus = indexed.filter(
-    (job) => job.applied === (filters.status === 'applied'),
-  ).length
+  const inStatus = indexed.filter((job) => job.status === filters.status).length
   const filtered = isFiltered(filters)
 
   const options = <K extends string>(
@@ -197,12 +202,7 @@ export function MatchList({
       />
     ))
 
-  const sections = SECTIONS.flatMap((section) => {
-    const list = visible.filter(
-      ({ strength }) => strength === String(section.strength),
-    )
-    return list.length ? [{ ...section, list }] : []
-  })
+  const days = groupByDay(visible)
 
   return (
     <>
@@ -213,18 +213,14 @@ export function MatchList({
             onValueChange={(value) => set('status', value as Filters['status'])}
           >
             <TabsList>
-              <TabsTrigger value="open">
-                Para aplicar{' '}
-                <span className="text-muted-foreground tabular-nums">
-                  {count('status', (job) => !job.applied)}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="applied">
-                Já aplicadas{' '}
-                <span className="text-muted-foreground tabular-nums">
-                  {count('status', (job) => job.applied)}
-                </span>
-              </TabsTrigger>
+              {STATUS_TABS.map(({ value, label }) => (
+                <TabsTrigger key={value} value={value}>
+                  {label}{' '}
+                  <span className="text-muted-foreground tabular-nums">
+                    {count('status', (job) => job.status === value)}
+                  </span>
+                </TabsTrigger>
+              ))}
             </TabsList>
           </Tabs>
           <SearchInput
@@ -244,8 +240,12 @@ export function MatchList({
           >
             <TabsList aria-label="Quanto combina">
               <TabsTrigger value="all">Todas</TabsTrigger>
-              {SECTIONS.map(({ strength, tab }) => (
-                <TabsTrigger key={strength} value={String(strength)}>
+              {STRENGTHS.map(({ value: strength, tab, hint }) => (
+                <TabsTrigger
+                  key={strength}
+                  value={String(strength)}
+                  title={hint}
+                >
                   {tab}{' '}
                   <span className="text-muted-foreground tabular-nums">
                     {count(
@@ -326,19 +326,20 @@ export function MatchList({
         />
       </div>
 
-      {sections.length ? (
-        sections.map(({ strength, title, hint, list }) => (
-          <section key={strength} className="mt-8">
-            <h2 className="text-sm font-semibold">
-              {title}{' '}
-              <span className="font-normal text-muted-foreground tabular-nums">
-                ({list.length})
-              </span>
-            </h2>
-            <p className="text-xs text-muted-foreground">{hint}</p>
-            <div className="mt-4 flex flex-col gap-4">{cards(list)}</div>
-          </section>
-        ))
+      {days.length ? (
+        <div className="mt-8 flex flex-col gap-8">
+          {days.map(({ heading, jobs }) => (
+            <section key={heading} className="flex flex-col gap-4">
+              <h2
+                className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+                suppressHydrationWarning
+              >
+                {heading}
+              </h2>
+              {cards(jobs)}
+            </section>
+          ))}
+        </div>
       ) : (
         <div className="mt-6 rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
           {filtered ? (
@@ -358,9 +359,8 @@ export function MatchList({
                 Limpar filtros
               </Button>
             </>
-          ) : filters.status === 'applied' ? (
-            'Nenhuma vaga aplicada ainda.'
           ) : (
+            STATUS_TABS.find(({ value }) => value === filters.status)?.empty ||
             emptyMessage
           )}
         </div>

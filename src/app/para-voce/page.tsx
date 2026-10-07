@@ -1,7 +1,7 @@
 import { connection } from 'next/server'
 import { AnalysisPanel } from '@/components/analysis-panel'
 import { FeedProvider } from '@/components/feed-provider'
-import { MatchList } from '@/components/match-list'
+import { MatchList, type JobStatus } from '@/components/match-list'
 import { analysisOverview } from '@/lib/analysis/overview'
 import { buildLinkIndex } from '@/lib/links'
 import { readMatches, untriagedForMatch } from '@/lib/matches'
@@ -58,11 +58,17 @@ export default async function ForYouPage() {
     else jobs.set(key, { ...match, others: [] })
   }
   const grouped = [...jobs.values()]
-  // Applying through any of the posts counts for the job
-  const isApplied = ({ post, others }: (typeof grouped)[number]) =>
-    [post, ...others].some(({ status }) => status === 'applied')
+  // Marking any of the posts counts for the job; applied wins over seen
+  const statusOf = ({ post, others }: (typeof grouped)[number]): JobStatus => {
+    const statuses = [post, ...others].map(({ status }) => status)
+    return statuses.includes('applied')
+      ? 'applied'
+      : statuses.includes('seen')
+        ? 'seen'
+        : 'open'
+  }
 
-  const open = grouped.filter((job) => !isApplied(job))
+  const open = grouped.filter((job) => statusOf(job) === 'open')
   const strong = open.filter(({ verdict }) => verdict.strength === 3).length
   const analyzed = Object.keys(matches.triaged).length
   const waiting = untriagedForMatch(
@@ -78,13 +84,15 @@ export default async function ForYouPage() {
           Vagas para você
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {open.length} para aplicar ({strong} fortes) · {analyzed} analisadas
+          {open.length} para aplicar ({strong}{' '}
+          {strong === 1 ? 'forte' : 'fortes'}) · {analyzed} analisadas
         </p>
       </header>
       <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
         A IA lê os posts {triageWindowLabel(settings)} (mude em Ajustes), de
         todos os grupos, e deixa aqui só as vagas que combinam com o seu perfil.
-        Rode depois de cada pesquisa.
+        Rode depois de cada pesquisa. Vagas que você marcar como Já vi ou
+        Apliquei mudam de aba quando a página recarrega.
       </p>
       <AnalysisPanel
         kind="matches"
@@ -105,7 +113,7 @@ export default async function ForYouPage() {
             verdict,
             others: others.length,
             hasEmailCard: emailCards.has(post.id),
-            applied: isApplied({ post, verdict, others }),
+            status: statusOf({ post, verdict, others }),
           }))}
           city={profile.city}
           localPlaces={localPlaces(profile)}
