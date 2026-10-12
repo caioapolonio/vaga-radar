@@ -31,6 +31,10 @@ export function AnalysisPanel({
   const router = useRouter()
   const [overview, setOverview] = useState(initial)
   const [starting, setStarting] = useState(false)
+  // Unticking "Só posts nunca analisados" reads analyzed posts again; it
+  // goes back to ticked after each run, as rereading costs more
+  const [reanalyze, setReanalyze] = useState(false)
+  const [estimating, setEstimating] = useState(false)
   // The status from the last poll, to notice a run finishing
   const lastStatus = useRef<JobState['status'] | null>(
     initial.job?.status ?? null,
@@ -39,8 +43,25 @@ export function AnalysisPanel({
   const describe = (count: number) =>
     `${count} ${count === 1 ? found[0] : found[1]}`
 
+  const url = (rereading: boolean) =>
+    `/api/analysis?kind=${kind}${rereading ? '&reanalyze=1' : ''}`
+
+  // The posts and cost for the chosen mode
+  const choose = async (rereading: boolean) => {
+    setReanalyze(rereading)
+    setEstimating(true)
+    try {
+      const response = await fetch(url(rereading))
+      if (response.ok) setOverview(await response.json())
+    } catch {
+      toast.error('O servidor não respondeu')
+    } finally {
+      setEstimating(false)
+    }
+  }
+
   const poll = useEffectEvent(async () => {
-    const response = await fetch(`/api/analysis?kind=${kind}`).catch(() => null)
+    const response = await fetch(url(reanalyze)).catch(() => null)
     if (!response?.ok) return
     const next: AnalysisOverview = await response.json()
     const wasRunning = lastStatus.current === 'running'
@@ -55,6 +76,7 @@ export function AnalysisPanel({
           `Análise ${status === 'canceled' ? 'interrompida' : 'concluída'}: ${describe(matched)}`,
         )
       router.refresh()
+      if (reanalyze) void choose(false)
     }
   })
 
@@ -70,9 +92,7 @@ export function AnalysisPanel({
   const start = async () => {
     setStarting(true)
     try {
-      const response = await fetch(`/api/analysis?kind=${kind}`, {
-        method: 'POST',
-      })
+      const response = await fetch(url(reanalyze), { method: 'POST' })
       const result = await response.json()
       if (!response.ok) toast.error(result.error)
       else {
@@ -107,7 +127,7 @@ export function AnalysisPanel({
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm">
-              Analisando com {job.model}…{' '}
+              {job.reanalyze ? 'Reanalisando' : 'Analisando'} com {job.model}…{' '}
               <span className="text-muted-foreground tabular-nums">
                 {job.done + job.skipped} de {job.total} posts ·{' '}
                 {describe(job.matched)}
@@ -132,9 +152,11 @@ export function AnalysisPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm">
             <p>
-              {overview.pending
-                ? `${overview.pending} posts esperando a IA`
-                : 'Nenhum post esperando a IA.'}
+              {reanalyze
+                ? `${overview.pending} posts para reanalisar`
+                : overview.pending
+                  ? `${overview.pending} posts novos esperando a IA`
+                  : 'Nenhum post novo esperando a IA.'}
             </p>
             {overview.pending > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -143,6 +165,23 @@ export function AnalysisPanel({
                 {compact.format(overview.outputTokens)} de saída
                 {overview.costUsd !== null && ` (${cost(overview.costUsd)})`}
                 {overview.subscription && ' · usa a cota da sua assinatura'}
+              </p>
+            )}
+            <label className="mt-2 flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={!reanalyze}
+                disabled={estimating}
+                onChange={(event) => void choose(!event.target.checked)}
+                className="size-4 accent-primary"
+              />
+              Só posts nunca analisados
+            </label>
+            {reanalyze && (
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                Lê de novo os posts já analisados {overview.window}
+                {kind === 'emails' && ', menos os que já têm card'}. O resultado
+                novo substitui o antigo.
               </p>
             )}
             {job && job.status !== 'running' && (
@@ -165,10 +204,14 @@ export function AnalysisPanel({
           </div>
           <Button
             onClick={() => void start()}
-            disabled={starting || !overview.pending}
+            disabled={starting || estimating || !overview.pending}
           >
             <SparklesIcon data-icon="inline-start" />
-            {starting ? 'Iniciando…' : actionLabel}
+            {starting
+              ? 'Iniciando…'
+              : reanalyze
+                ? 'Reanalisar com IA'
+                : actionLabel}
           </Button>
         </div>
       )}

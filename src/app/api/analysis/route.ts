@@ -14,6 +14,10 @@ const kindOf = (request: NextRequest) => {
   return isAnalysisKind(kind) ? kind : null
 }
 
+// ?reanalyze=1 also reads posts already analyzed
+const reanalyzeOf = (request: NextRequest) =>
+  request.nextUrl.searchParams.get('reanalyze') === '1'
+
 const invalid = () =>
   Response.json({ error: 'Análise inválida' }, { status: 400 })
 
@@ -21,7 +25,7 @@ const invalid = () =>
 export async function GET(request: NextRequest) {
   const kind = kindOf(request)
   if (!kind) return invalid()
-  return Response.json(await analysisOverview(kind))
+  return Response.json(await analysisOverview(kind, reanalyzeOf(request)))
 }
 
 // A route handler, not a Server Action: a run takes minutes and Server
@@ -30,13 +34,14 @@ export async function POST(request: NextRequest) {
   const kind = kindOf(request)
   if (!kind) return invalid()
   try {
-    const { pending } = await analysisEstimate(kind)
+    const reanalyze = reanalyzeOf(request)
+    const { pending } = await analysisEstimate(kind, reanalyze)
     if (!pending)
       return Response.json(
         { error: 'Nenhum post esperando análise' },
         { status: 400 },
       )
-    return Response.json({ job: await startAnalysis(kind) })
+    return Response.json({ job: await startAnalysis(kind, reanalyze) })
   } catch (error) {
     return Response.json({ error: explainAiError(error) }, { status: 400 })
   }

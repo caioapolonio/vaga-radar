@@ -35,7 +35,7 @@ export const SETTING_FIELDS: NumberField[] = [
   {
     key: 'triageMaxAgeDays',
     label: 'Posts que a IA analisa',
-    hint: 'Idade máxima dos posts lidos nas análises de "Para você" e "E-mails". Posts mais velhos são ignorados.',
+    hint: 'Idade máxima dos posts lidos nas análises de "Para você" e "E-mails"; os mais velhos são ignorados. Posts já analisados não são lidos de novo, a não ser que você desmarque "Só posts nunca analisados" na hora de analisar.',
     min: 1,
     max: 365,
     step: 1,

@@ -55,6 +55,8 @@ export type JobState = {
   model: string
   // Runs on a CLI's subscription, so there's no cost to show
   subscription: boolean
+  // Also reads posts already analyzed (see pendingPosts)
+  reanalyze: boolean
   total: number
   // Posts with a saved verdict
   done: number
@@ -91,7 +93,9 @@ const jobs = (globalJobs.analysisJobs ??= new Map())
 
 export const jobState = (kind: AnalysisKind) => jobs.get(kind)?.state ?? null
 
-async function pendingPosts(kind: AnalysisKind) {
+// Posts never analyzed by this kind of analysis; with `reanalyze`, the ones
+// already analyzed too. Either way only within the age limit from /ajustes
+async function pendingPosts(kind: AnalysisKind, reanalyze: boolean) {
   const [store, settings, matches, outreach] = await Promise.all([
     readStore(),
     readSettings(),
@@ -99,9 +103,22 @@ async function pendingPosts(kind: AnalysisKind) {
     readOutreach(),
   ])
   const cutoff = triageCutoff(settings)
-  return kind === 'matches'
-    ? untriagedForMatch(store, matches, cutoff)
-    : untriagedPosts(store, outreach, cutoff)
+  if (!reanalyze)
+    return kind === 'matches'
+      ? untriagedForMatch(store, matches, cutoff)
+      : untriagedPosts(store, outreach, cutoff)
+
+  const recent = (post: Post) =>
+    cutoff === null || new Date(post.postedAt).getTime() >= cutoff
+  // A post with a card (waiting, sent or discarded) is never written again
+  const carded = new Set(outreach.drafts.map(({ postId }) => postId))
+  return store.posts.filter(
+    (post) =>
+      post.status !== 'applied' &&
+      recent(post) &&
+      (kind === 'matches' ||
+        (!carded.has(post.id) && findEmails(post.content).length > 0)),
+  )
 }
 
 // Reposts share their text: judge one, copy the verdict to the rest
@@ -123,9 +140,9 @@ async function instructionsFor(kind: AnalysisKind) {
   return { instructions: `${task}\n\n${candidateBlock(profile, cvs)}`, cvs }
 }
 
-export async function analysisEstimate(kind: AnalysisKind) {
+export async function analysisEstimate(kind: AnalysisKind, reanalyze = false) {
   const [posts, { instructions }] = await Promise.all([
-    pendingPosts(kind),
+    pendingPosts(kind, reanalyze),
     instructionsFor(kind),
   ])
   const groups = groupReposts(posts)
@@ -285,7 +302,7 @@ async function run(job: Job) {
     ? Math.min(settings.concurrency, 2)
     : settings.concurrency
 
-  const posts = await pendingPosts(kind)
+  const posts = await pendingPosts(kind, state.reanalyze)
   state.total = posts.length
   const queue = groupReposts(posts)
   // First failure of each post: it goes back to the queue once, with the reason
@@ -370,7 +387,7 @@ async function run(job: Job) {
   await Promise.all(Array.from({ length: concurrency }, worker))
 }
 
-export async function startAnalysis(kind: AnalysisKind) {
+export async function startAnalysis(kind: AnalysisKind, reanalyze = false) {
   const running = jobs.get(kind)
   if (running?.state.status === 'running') return running.state
 
@@ -383,6 +400,7 @@ export async function startAnalysis(kind: AnalysisKind) {
       status: 'running',
       model: modelLabel(ai, roleOf(kind)),
       subscription: isCliProvider(ai.provider),
+      reanalyze,
       total: 0,
       done: 0,
       matched: 0,
