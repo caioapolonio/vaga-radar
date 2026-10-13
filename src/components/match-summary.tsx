@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { jobBadges } from '@/lib/job'
+import { toHref } from '@/lib/links'
 import { strengthInfo } from '@/lib/match-strength'
 import type { MatchVerdict } from '@/lib/matches'
 import type { Post } from '@/lib/store'
@@ -23,6 +24,7 @@ export function MatchSummary({
 }) {
   const job = verdict.job ?? { title: 'Vaga' }
   const strength = strengthInfo(verdict.strength)
+  const applyHref = verdict.applyUrl && toHref(verdict.applyUrl)
 
   return (
     <div className="mb-4 border-b pb-4">
@@ -43,10 +45,10 @@ export function MatchSummary({
               Card de e-mail
             </Link>
           )}
-          {verdict.applyUrl && (
+          {applyHref && (
             <TrackedLink
               post={post}
-              href={verdict.applyUrl}
+              href={applyHref}
               className={buttonVariants({ size: 'sm' })}
             >
               Candidatar-se

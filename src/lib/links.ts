@@ -6,6 +6,23 @@ const TRACKING_PARAM = /^(utm_|trk|tracking|ref|fbclid|gclid)/i
 // Recruiters often link their own profile, which says nothing about the job
 const PROFILE_LINK = /linkedin\.com\/(in|company)\//i
 
+const EMAIL_ADDRESS = /^[^\s@/:]+@[^\s@/]+\.[a-z]{2,}$/i
+// "nerdin.com.br/vaga/1", "www.empresa.com": a domain, maybe with a path
+const BARE_DOMAIN = /^(www\.)?[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}([/?#]|$)/i
+
+// A link as a post writes it, ready for an href. Posts often leave out
+// "https://", which browsers would read as a path on this site; anything
+// other than a web page or an email address gets no link at all
+export function toHref(raw: string) {
+  const link = raw.trim()
+  if (/^https?:\/\//i.test(link) || /^mailto:/i.test(link)) return link
+  if (EMAIL_ADDRESS.test(link)) return `mailto:${link}`
+  // javascript:, data: and other schemes
+  if (/^[a-z][a-z0-9+.-]*:/i.test(link)) return null
+  if (BARE_DOMAIN.test(link)) return `https://${link}`
+  return null
+}
+
 // Same job shared by different posts should map to the same key
 export function normalizeUrl(raw: string) {
   try {
