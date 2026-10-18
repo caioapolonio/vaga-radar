@@ -1,11 +1,15 @@
 import { connection } from 'next/server'
 import { AnalysisPanel } from '@/components/analysis-panel'
 import { FeedProvider } from '@/components/feed-provider'
-import { MatchList, type JobStatus } from '@/components/match-list'
+import {
+  MatchList,
+  type JobStatus,
+  type MatchJob,
+} from '@/components/match-list'
 import { analysisOverview } from '@/lib/analysis/overview'
 import { buildLinkIndex } from '@/lib/links'
 import { readMatches, untriagedForMatch } from '@/lib/matches'
-import { readOutreach } from '@/lib/outreach'
+import { cardForJob, findEmails, readOutreach } from '@/lib/outreach'
 import { localPlaces, readProfile } from '@/lib/profile'
 import { readSearchConfig, searchLabels } from '@/lib/searches'
 import { readSettings, triageCutoff } from '@/lib/settings'
@@ -36,7 +40,6 @@ export default async function ForYouPage() {
     ])
 
   const posts = new Map(store.posts.map((post) => [post.id, post]))
-  const emailCards = new Set(outreach.drafts.map(({ postId }) => postId))
   const matched = Object.entries(matches.triaged)
     .flatMap(([postId, verdict]) => {
       const post = verdict.match && posts.get(postId)
@@ -57,13 +60,51 @@ export default async function ForYouPage() {
     if (job) job.others.push(match.post)
     else jobs.set(key, { ...match, others: [] })
   }
-  const grouped = [...jobs.values()]
-  // Marking any of the posts counts for the job; applied wins over seen
-  const statusOf = ({ post, others }: (typeof grouped)[number]): JobStatus => {
+
+  // The job shares its card with E-mails: sending or discarding it there
+  // moves the job here too
+  const emailOf = (
+    jobPosts: Post[],
+  ): Pick<MatchJob, 'emailCard' | 'noEmailCard'> => {
+    const card = cardForJob(jobPosts, outreach.drafts)
+    if (card) {
+      const own = jobPosts.some(({ id }) => id === card.postId)
+      return {
+        emailCard: {
+          postId: card.postId,
+          status: card.status,
+          to: card.to,
+          at: card.statusAt,
+          ...(!own && { otherJob: card.job.title }),
+        },
+        noEmailCard: null,
+      }
+    }
+    const passed = jobPosts.find(
+      (post) =>
+        outreach.triaged[post.id]?.match === false &&
+        findEmails(post.content).length > 0,
+    )
+    return {
+      emailCard: null,
+      noEmailCard: passed ? outreach.triaged[passed.id].reason : null,
+    }
+  }
+  const grouped = [...jobs.values()].map((job) => ({
+    ...job,
+    ...emailOf([job.post, ...job.others]),
+  }))
+  // Marking any of the posts counts for the job, and so does its email card;
+  // applied wins over seen
+  const statusOf = ({
+    post,
+    others,
+    emailCard,
+  }: (typeof grouped)[number]): JobStatus => {
     const statuses = [post, ...others].map(({ status }) => status)
-    return statuses.includes('applied')
+    return statuses.includes('applied') || emailCard?.status === 'sent'
       ? 'applied'
-      : statuses.includes('seen')
+      : statuses.includes('seen') || emailCard?.status === 'discarded'
         ? 'seen'
         : 'open'
   }
@@ -92,7 +133,8 @@ export default async function ForYouPage() {
         A IA lê os posts {triageWindowLabel(settings)} (mude em Ajustes), de
         todos os grupos, e deixa aqui só as vagas que combinam com o seu perfil.
         Rode depois de cada pesquisa. Vagas que você marcar como Já vi ou
-        Apliquei mudam de aba quando a página recarrega.
+        Apliquei, ou cujo e-mail enviar ou descartar em E-mails, mudam de aba
+        quando a página recarrega.
       </p>
       <AnalysisPanel
         kind="matches"
@@ -108,12 +150,13 @@ export default async function ForYouPage() {
         searchLabels={searchLabels(config)}
       >
         <MatchList
-          jobs={grouped.map(({ post, verdict, others }) => ({
-            post,
-            verdict,
-            others: others.length,
-            hasEmailCard: emailCards.has(post.id),
-            status: statusOf({ post, verdict, others }),
+          jobs={grouped.map((job) => ({
+            post: job.post,
+            verdict: job.verdict,
+            others: job.others.length,
+            emailCard: job.emailCard,
+            noEmailCard: job.noEmailCard,
+            status: statusOf(job),
           }))}
           city={profile.city}
           localPlaces={localPlaces(profile)}

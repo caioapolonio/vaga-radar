@@ -4,7 +4,7 @@ import { cvDirOf, readAppConfig } from './config'
 import type { JobSummary } from './job'
 import { jsonUpdater, readJson } from './json-file'
 import { fallbackCvLabel, type Profile } from './profile-fields'
-import type { Store } from './store'
+import type { Post, Store } from './store'
 
 export type DraftStatus = 'pending' | 'sent' | 'discarded'
 
@@ -51,6 +51,27 @@ export function findEmails(text: string) {
     .map((email) => email.toLowerCase())
     .filter((email) => !IMAGE_FILE.test(email))
   return [...new Set(emails)]
+}
+
+// Sent wins: once you've emailed about the job, that's what counts
+const CARD_ORDER: Record<DraftStatus, number> = {
+  sent: 0,
+  pending: 1,
+  discarded: 2,
+}
+
+// The card behind a job on Para você: one written for any of its posts, or
+// else one written to an address in them, since the AI writes one card per
+// address and the job's other posts never get their own
+export function cardForJob(posts: Post[], drafts: Draft[]) {
+  const ids = new Set(posts.map(({ id }) => id))
+  const emails = new Set(posts.flatMap((post) => findEmails(post.content)))
+  const rank = (draft: Draft) =>
+    CARD_ORDER[draft.status] * 2 + (ids.has(draft.postId) ? 0 : 1)
+  return drafts
+    .filter((draft) => ids.has(draft.postId) || emails.has(draft.to))
+    .sort((a, b) => rank(a) - rank(b))
+    .at(0)
 }
 
 // Posts with an email address that the AI hasn't read yet, within the triage

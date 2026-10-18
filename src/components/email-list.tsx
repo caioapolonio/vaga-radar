@@ -217,7 +217,9 @@ export function EmailList({
         {indexed.map((item) => (
           <div
             key={item.draft.postId}
-            className={cn(!passes(item) && 'hidden')}
+            // Linked from the job on Para você
+            id={`card-${item.draft.postId}`}
+            className={cn('scroll-mt-4', !passes(item) && 'hidden')}
           >
             <EmailCard
               // A rewrite replaces the text the card is editing

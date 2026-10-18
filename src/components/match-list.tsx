@@ -25,7 +25,7 @@ import {
   PresenceFilter,
   SearchInput,
 } from './filters'
-import { MatchSummary } from './match-summary'
+import { MatchSummary, type JobEmailCard } from './match-summary'
 import { PostCard } from './post-card'
 
 // One job, folded from every post about it
@@ -34,11 +34,13 @@ export type MatchJob = {
   verdict: MatchVerdict
   // Other posts about the same job
   others: number
-  hasEmailCard: boolean
+  emailCard: JobEmailCard | null
+  // Why E-mails wrote no card for a post with an address
+  noEmailCard: string | null
   status: JobStatus
 }
 
-// From the marks on the job's posts: applied wins over seen
+// From the marks on the job's posts and its email card: applied wins over seen
 export type JobStatus = 'open' | 'seen' | 'applied'
 
 const STATUS_TABS: { value: JobStatus; label: string; empty: string }[] = [
@@ -165,7 +167,7 @@ export function MatchList({
     (skip === 'applyLink' ||
       presenceMatches(filters.applyLink, !!job.verdict.applyUrl)) &&
     (skip === 'emailCard' ||
-      presenceMatches(filters.emailCard, job.hasEmailCard))
+      presenceMatches(filters.emailCard, !!job.emailCard))
   const count = (skip: keyof Filters, belongs: (job: Indexed) => boolean) =>
     indexed.filter((job) => passes(job, skip) && belongs(job)).length
 
@@ -187,7 +189,7 @@ export function MatchList({
   ]
 
   const cards = (list: Indexed[]) =>
-    list.map(({ post, verdict, others, hasEmailCard }) => (
+    list.map(({ post, verdict, others, emailCard, noEmailCard }) => (
       <PostCard
         key={post.id}
         post={post}
@@ -195,7 +197,8 @@ export function MatchList({
           <MatchSummary
             post={post}
             verdict={verdict}
-            hasEmailCard={hasEmailCard}
+            emailCard={emailCard}
+            noEmailCard={noEmailCard}
             otherPosts={others}
           />
         }
@@ -306,11 +309,11 @@ export function MatchList({
           />
           <PresenceFilter
             label="Card de e-mail"
-            title="A IA já escreveu um e-mail para esta vaga"
+            title="A IA já escreveu um e-mail para esta vaga ou para o mesmo endereço"
             icon={MailIcon}
             value={filters.emailCard}
-            withCount={count('emailCard', (job) => job.hasEmailCard)}
-            withoutCount={count('emailCard', (job) => !job.hasEmailCard)}
+            withCount={count('emailCard', (job) => !!job.emailCard)}
+            withoutCount={count('emailCard', (job) => !job.emailCard)}
             onChange={(value) => set('emailCard', value)}
           />
         </div>
