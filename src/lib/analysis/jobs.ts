@@ -197,8 +197,11 @@ async function payloadFor(kind: AnalysisKind, posts: Post[]) {
       author: `${post.author.name} · ${post.author.headline}`,
       attachment: post.attachment ?? null,
       emails,
+      // A post's own card isn't an earlier one (rewriting it)
       earlierDrafts: drafts
-        .filter((draft) => emails.includes(draft.to))
+        .filter(
+          (draft) => draft.postId !== post.id && emails.includes(draft.to),
+        )
         .map(({ to, status, job }) => ({ to, status, job: job.title })),
       content: post.content.slice(0, MAX_CONTENT_CHARS),
     }
@@ -432,4 +435,77 @@ export async function startAnalysis(kind: AnalysisKind, reanalyze = false) {
 
 export function cancelAnalysis(kind: AnalysisKind) {
   jobs.get(kind)?.controller.abort()
+}
+
+// Writes a waiting card again with the current profile and prompt. The card
+// stays as it was when the AI no longer thinks the job fits
+export async function rewriteDraft(
+  postId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [store, outreach, ai, { instructions, cvs }] = await Promise.all([
+    readStore(),
+    readOutreach(),
+    readAiConfig(),
+    instructionsFor('emails'),
+  ])
+  const post = store.posts.find(({ id }) => id === postId)
+  const draft = outreach.drafts.find((draft) => draft.postId === postId)
+  if (!post || draft?.status !== 'pending')
+    return {
+      ok: false,
+      error: 'Só dá para reescrever um card que espera revisão',
+    }
+
+  const [item] = await payloadFor('emails', [post])
+  let problem: string | null = null
+  // One more try when the answer fails the checks, telling the AI why
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const prompt: string = `Posts:\n${JSON.stringify(
+      [{ ...item, ...(problem && { previousAttemptProblem: problem }) }],
+      null,
+      1,
+    )}`
+    const { output } = await generateStructured({
+      ai,
+      role: roleOf('emails'),
+      instructions,
+      prompt,
+      schema: emailOutput,
+    })
+    const result: EmailResult | undefined = output.results.find(
+      (result) => result.postId === postId,
+    )
+    if (result && !result.match)
+      return {
+        ok: false,
+        error: `A IA acha que a vaga não combina mais (${result.reason}). O card ficou como estava.`,
+      }
+    problem = result ? emailProblem(result, post, cvs) : 'faltou o resultado'
+    if (result?.draft && !problem) {
+      const { job, fit, to, subject, body, cv } = result.draft
+      const at = new Date().toISOString()
+      await updateOutreach((current) => ({
+        ...current,
+        drafts: current.drafts.map((saved) =>
+          saved.postId === postId && saved.status === 'pending'
+            ? {
+                ...saved,
+                job: toJobSummary(job),
+                fit: fit.trim(),
+                to: to.trim().toLowerCase(),
+                subject: subject.trim(),
+                body: body.trim(),
+                cv,
+                rewrittenAt: at,
+              }
+            : saved,
+        ),
+      }))
+      return { ok: true }
+    }
+  }
+  return {
+    ok: false,
+    error: `A resposta da IA não passou nas checagens: ${problem}`,
+  }
 }

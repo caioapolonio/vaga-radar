@@ -1,6 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { explainAiError } from '@/lib/ai'
+import { rewriteDraft } from '@/lib/analysis/jobs'
 import { sendMail } from '@/lib/mail'
 import {
   cvPath,
@@ -121,4 +123,15 @@ export async function setDraftStatus(
     statusAt: status === 'discarded' ? new Date().toISOString() : undefined,
   })
   revalidatePath('/emails')
+}
+
+// "Reescrever com IA" on a waiting card
+export async function rewriteDraftWithAi(postId: string): Promise<SendResult> {
+  try {
+    const result = await rewriteDraft(postId)
+    if (result.ok) revalidatePath('/emails')
+    return result
+  } catch (error) {
+    return { ok: false, error: explainAiError(error) }
+  }
 }

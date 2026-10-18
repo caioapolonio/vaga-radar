@@ -22,6 +22,8 @@ export type Draft = {
   cv: string
   status: DraftStatus
   statusAt?: string
+  // Last time "Reescrever com IA" wrote it again
+  rewrittenAt?: string
 }
 
 export type DraftFields = Pick<Draft, 'to' | 'subject' | 'body' | 'cv'>

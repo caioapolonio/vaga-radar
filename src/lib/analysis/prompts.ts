@@ -24,6 +24,7 @@ export function candidateBlock(profile: Profile, cvs: string[]) {
   })
   return `# Candidato
 
+Data de hoje: ${new Date().toISOString().slice(0, 10)}
 Nome: ${profile.name || '(não informado)'}
 Cidade: ${profile.city || '(não informada)'}${profile.nearbyCities ? ` (região: ${profile.nearbyCities})` : ''}
 Níveis que procura: ${labelsOf(TARGET_LEVELS, profile.levels)}
@@ -94,14 +95,21 @@ ${JOB_FIELDS}
 - body: texto puro, de 50 a 90 palavras sem contar a assinatura:
   1. Saudação com o primeiro nome de quem postou, se o e-mail é dessa pessoa; senão "Olá, equipe de recrutamento," ou "Hi,".
   2. Uma frase: qual vaga e onde viu (no post dela no LinkedIn).
-  3. Uma ou duas frases com a experiência dele mais ligada aos requisitos do post: no máximo duas empresas ou projetos, com a tecnologia. Nada genérico como "sou apaixonado por tecnologia".
+  3. A experiência, em uma frase curta por emprego: primeiro o emprego atual, depois o anterior mais ligado à vaga. Cite os dois mesmo que a vaga seja de uma área só (só front-end, por exemplo). Em cada um, as tecnologias do post que ele usou ali. Um projeto pessoal só entra se nenhum emprego cobrir o que o post pede.
   4. Uma frase sobre disponibilidade e modelo de trabalho, e que o currículo vai em anexo.
   5. Despedida curta e a assinatura exatamente como no perfil.
+
+Como falar dos empregos:
+- O emprego marcado como atual no perfil vai no presente ("Hoje sou desenvolvedor full-stack na X", "I currently work as a full-stack developer at X"). Os anteriores vão no passado ("Antes, na Y, fui front-end", "Before that, at Y, I worked as a front-end developer"). Nunca apresente um emprego anterior como atual.
+- Use o cargo de cada emprego como está no perfil: não chame de full-stack um emprego em que ele foi front-end, nem some os empregos num cargo só ("2 anos de full-stack na X e na Y").
+- Cada tecnologia fica no emprego em que o perfil diz que ela foi usada. Não leve uma tecnologia de um emprego para o outro, e não diga que ele usou em produção algo que o perfil lista só como conhecimento.
+- Sem exagero: nada de "arquitetei", "liderei", "sólida experiência" ou "expert" se o perfil não disser isso. Fatos curtos convencem mais.
 
 Regras do texto:
 - Idioma: português para post em português; inglês para post em inglês e também em espanhol.
 - Nunca use ponto e vírgula (;). Soa escrito por IA: use ponto final ou vírgula.
 - Nunca invente experiência, anos, números, tecnologias ou certificações que não estão no perfil.
+- Respeite as 90 palavras: corte adjetivos antes de cortar os fatos.
 - Pretensão salarial só se o post pedir, pela tabela do perfil.
 - Se o post pede algo que só o candidato sabe e que não está no perfil (CNPJ, portfólio específico…), escreva [PREENCHER: o que falta] no lugar e avise no fit.
 - Siga as regras do candidato para os e-mails.

@@ -219,7 +219,13 @@ export function EmailList({
             key={item.draft.postId}
             className={cn(!passes(item) && 'hidden')}
           >
-            <EmailCard draft={item.draft} post={item.post} cvs={cvs} />
+            <EmailCard
+              // A rewrite replaces the text the card is editing
+              key={item.draft.rewrittenAt ?? 'original'}
+              draft={item.draft}
+              post={item.post}
+              cvs={cvs}
+            />
           </div>
         ))}
 

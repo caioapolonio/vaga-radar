@@ -10,7 +10,12 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { saveDraft, sendDraft, setDraftStatus } from '@/app/emails/actions'
+import {
+  rewriteDraftWithAi,
+  saveDraft,
+  sendDraft,
+  setDraftStatus,
+} from '@/app/emails/actions'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { formatDateTime, formatRelative } from '@/lib/format'
@@ -81,6 +86,27 @@ export function EmailCard({
     } finally {
       setBusy(false)
       setConfirming(false)
+    }
+  }
+
+  const [rewriting, setRewriting] = useState(false)
+  const rewrite = async () => {
+    setBusy(true)
+    setRewriting(true)
+    try {
+      const result = await rewriteDraftWithAi(draft.postId)
+      if (result.ok) toast.success('E-mail reescrito: revise antes de enviar')
+      else
+        toast.error('Não foi possível reescrever', {
+          description: result.error,
+        })
+    } catch {
+      toast.error('Não foi possível reescrever', {
+        description: 'O servidor não respondeu.',
+      })
+    } finally {
+      setBusy(false)
+      setRewriting(false)
     }
   }
 
@@ -260,6 +286,15 @@ export function EmailCard({
             >
               <XIcon data-icon="inline-start" />
               Descartar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={rewrite}
+              disabled={busy}
+              title="A IA escreve este e-mail de novo, com o perfil e as regras atuais"
+            >
+              <SparklesIcon data-icon="inline-start" />
+              {rewriting ? 'Reescrevendo…' : 'Reescrever com IA'}
             </Button>
             <Button onClick={() => setConfirming(true)} disabled={busy}>
               <SendIcon data-icon="inline-start" />
