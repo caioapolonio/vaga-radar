@@ -4,6 +4,7 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   DownloadIcon,
+  ExternalLinkIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -23,6 +24,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  linkedinSearchUrl,
   MAX_OPERATORS,
   operatorCount,
   queryProblem,
@@ -369,6 +371,16 @@ function SearchRow({
           </>
         ) : (
           <>
+            <a
+              href={linkedinSearchUrl(search.query)}
+              target="_blank"
+              rel="noreferrer"
+              title="Abre esta busca no LinkedIn, posts mais recentes primeiro"
+              className={buttonVariants({ variant: 'outline', size: 'xs' })}
+            >
+              LinkedIn
+              <ExternalLinkIcon data-icon="inline-end" />
+            </a>
             <Button
               variant="ghost"
               size="icon-sm"

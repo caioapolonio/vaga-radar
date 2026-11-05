@@ -26,7 +26,8 @@ export default async function SearchesPage() {
         <p>
           Cada grupo vira uma aba na página Vagas e pode ser re-pesquisado
           sozinho. As buscas usam a pesquisa de posts do LinkedIn, pela sua
-          conta da Apify.
+          conta da Apify. O botão LinkedIn abre a mesma busca no site, mais
+          recentes primeiro, para pesquisar à mão sem gastar crédito.
         </p>
         <p className="text-xs">
           Na primeira pesquisa, cada busca traz até {settings.maxPostsPerSearch}{' '}

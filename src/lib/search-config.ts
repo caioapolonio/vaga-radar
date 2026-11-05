@@ -64,6 +64,15 @@ export const runnableSearches = (
         .map((search) => ({ ...search, recentOnly })),
     )
 
+// The same search on LinkedIn, newest posts first, for searching by hand.
+// Parentheses are escaped too, as LinkedIn writes them
+export function linkedinSearchUrl(query: string) {
+  const keywords = encodeURIComponent(query.trim())
+    .replaceAll('(', '%28')
+    .replaceAll(')', '%29')
+  return `https://www.linkedin.com/search/results/content/?keywords=${keywords}&origin=FACETED_SEARCH&sortBy=%5B%22date_posted%22%5D`
+}
+
 // Search id -> label, for the chips on each post
 export const searchLabels = ({ groups }: SearchConfig) =>
   Object.fromEntries(

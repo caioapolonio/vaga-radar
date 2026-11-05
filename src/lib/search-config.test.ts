@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  linkedinSearchUrl,
   newId,
   operatorCount,
   queryProblem,
@@ -61,9 +62,19 @@ describe('search groups', () => {
   })
 
   it('makes readable ids from names', () => {
-    expect(newId('Dev Recife (PJ)')).toMatch(
-      /^dev-recife-pj-[a-z0-9]{4}$/,
-    )
+    expect(newId('Dev Recife (PJ)')).toMatch(/^dev-recife-pj-[a-z0-9]{4}$/)
     expect(newId('***')).toMatch(/^busca-[a-z0-9]{4}$/)
+  })
+})
+
+describe('linkedinSearchUrl', () => {
+  it('opens the post search sorted by date, as LinkedIn writes it', () => {
+    expect(
+      linkedinSearchUrl(
+        ' ("remoto") AND ("contratando") AND ("desenvolvedor") ',
+      ),
+    ).toBe(
+      'https://www.linkedin.com/search/results/content/?keywords=%28%22remoto%22%29%20AND%20%28%22contratando%22%29%20AND%20%28%22desenvolvedor%22%29&origin=FACETED_SEARCH&sortBy=%5B%22date_posted%22%5D',
+    )
   })
 })
