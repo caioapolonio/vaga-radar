@@ -148,16 +148,32 @@ export default async function ForYouPage() {
         key={store.lastSearchedAt ?? 'never'}
         linkIndex={buildLinkIndex(store.posts, store.openedLinks)}
         searchLabels={searchLabels(config)}
+        jobPosts={Object.fromEntries(
+          grouped
+            .filter(({ others }) => others.length)
+            .map(({ post, others }) => [
+              post.id,
+              [post.id, ...others.map(({ id }) => id)],
+            ]),
+        )}
       >
         <MatchList
-          jobs={grouped.map((job) => ({
-            post: job.post,
-            verdict: job.verdict,
-            others: job.others.length,
-            emailCard: job.emailCard,
-            noEmailCard: job.noEmailCard,
-            status: statusOf(job),
-          }))}
+          jobs={grouped.map((job) => {
+            const status = statusOf(job)
+            return {
+              // The card shows the job's status, which may come from another
+              // of its posts or from its email card
+              post: {
+                ...job.post,
+                status: status === 'open' ? undefined : status,
+              },
+              verdict: job.verdict,
+              others: job.others.length,
+              emailCard: job.emailCard,
+              noEmailCard: job.noEmailCard,
+              status,
+            }
+          })}
           city={profile.city}
           localPlaces={localPlaces(profile)}
           emptyMessage={`Nenhuma vaga filtrada ainda. ${

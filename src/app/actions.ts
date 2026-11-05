@@ -11,11 +11,16 @@ const withStatus = (post: Post, status: PostStatus | null): Post => ({
   statusAt: status ? new Date().toISOString() : undefined,
 })
 
-export async function setPostStatus(postId: string, status: PostStatus | null) {
+// Several ids when a card folds more than one post (Para você)
+export async function setPostStatus(
+  postIds: string[],
+  status: PostStatus | null,
+) {
+  const ids = new Set(postIds)
   await updateStore((store) => ({
     ...store,
     posts: store.posts.map((post) =>
-      post.id === postId ? withStatus(post, status) : post,
+      ids.has(post.id) ? withStatus(post, status) : post,
     ),
   }))
   revalidatePath('/')

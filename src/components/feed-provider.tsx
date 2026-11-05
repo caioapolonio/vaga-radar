@@ -38,10 +38,14 @@ const warnNotSaved = () =>
 export function FeedProvider({
   linkIndex,
   searchLabels,
+  jobPosts = {},
   children,
 }: {
   linkIndex: LinkIndex
   searchLabels: Record<string, string>
+  // Para você shows one card per job: shown post id -> every post of the job,
+  // so marking the card marks them all
+  jobPosts?: Record<string, string[]>
   children: React.ReactNode
 }) {
   const [statuses, setStatuses] = useState<Record<string, PostStatus | null>>(
@@ -54,7 +58,11 @@ export function FeedProvider({
 
   const setStatus = (post: Post, status: PostStatus | null) => {
     const at = new Date().toISOString()
-    setStatuses((current) => ({ ...current, [post.id]: status }))
+    const ids = jobPosts[post.id] ?? [post.id]
+    setStatuses((current) => ({
+      ...current,
+      ...Object.fromEntries(ids.map((id) => [id, status])),
+    }))
     setLinks((current) => {
       const applied = Object.fromEntries(
         Object.entries(current.applied).filter(
@@ -66,7 +74,7 @@ export function FeedProvider({
           applied[link] ??= { postId: post.id, at }
       return { ...current, applied }
     })
-    setPostStatus(post.id, status).catch(warnNotSaved)
+    setPostStatus(ids, status).catch(warnNotSaved)
   }
 
   const openLink = (post: Post, url: string) => {
