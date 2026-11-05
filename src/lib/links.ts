@@ -41,6 +41,24 @@ export const jobLinks = (post: Post) =>
     .filter((link): link is string => !!link && !PROFILE_LINK.test(link))
     .map(normalizeUrl)
 
+// The Apply button only goes on posts with a single link: in one with several
+// (lists of jobs, mostly) the AI may have picked the wrong one, so the user
+// picks by hand. LinkedIn's attachment is the preview of a link in the text,
+// often written as lnkd.in, so it only counts when the text has none
+export function applyButtonUrl(post: Post, applyUrl: string | undefined) {
+  const href = applyUrl && toHref(applyUrl)
+  if (!href) return undefined
+  const links = new Set(
+    (post.content.match(URL_PATTERN) ?? [])
+      .filter((link) => !PROFILE_LINK.test(link))
+      .map(normalizeUrl),
+  )
+  const attachment = post.attachment && normalizeUrl(post.attachment.url)
+  if (!links.size && attachment) links.add(attachment)
+  if (normalizeUrl(href) !== attachment) links.add(normalizeUrl(href))
+  return links.size === 1 ? applyUrl : undefined
+}
+
 export type LinkNotice = { kind: 'applied' | 'opened'; at: string }
 
 // Normalized URL -> when it was first opened / which post applied through it

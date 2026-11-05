@@ -7,7 +7,7 @@ import {
   type MatchJob,
 } from '@/components/match-list'
 import { analysisOverview } from '@/lib/analysis/overview'
-import { buildLinkIndex } from '@/lib/links'
+import { applyButtonUrl, buildLinkIndex } from '@/lib/links'
 import { readMatches, untriagedForMatch } from '@/lib/matches'
 import { cardForJob, findEmails, readOutreach } from '@/lib/outreach'
 import { localPlaces, readProfile } from '@/lib/profile'
@@ -167,7 +167,11 @@ export default async function ForYouPage() {
                 ...job.post,
                 status: status === 'open' ? undefined : status,
               },
-              verdict: job.verdict,
+              // Candidatar-se only for a post with a single link
+              verdict: {
+                ...job.verdict,
+                applyUrl: applyButtonUrl(job.post, job.verdict.applyUrl),
+              },
               others: job.others.length,
               emailCard: job.emailCard,
               noEmailCard: job.noEmailCard,

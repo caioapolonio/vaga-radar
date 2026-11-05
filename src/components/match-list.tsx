@@ -300,7 +300,7 @@ export function MatchList({
         <div className="flex flex-wrap items-center gap-3">
           <PresenceFilter
             label="Link para aplicar"
-            title="O post traz o link da vaga (botão Candidatar-se)"
+            title="O post traz um link só, o da vaga (botão Candidatar-se). Posts com vários links ficam sem o botão: abra o post e escolha"
             icon={LinkIcon}
             value={filters.applyLink}
             withCount={count('applyLink', (job) => !!job.verdict.applyUrl)}
