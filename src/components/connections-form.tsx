@@ -14,9 +14,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   AI_PROVIDERS,
+  availableCodexModel,
   isCliProvider,
   MODEL_PRICES,
   providerInfo,
+  type AiModelOption,
   type AiProvider,
   type CliStatus,
 } from '@/lib/ai-fields'
@@ -32,18 +34,22 @@ const CARD = 'rounded-xl border bg-card p-4 shadow-xs'
 const LABEL = 'flex flex-col gap-1.5 text-sm font-medium'
 const HINT = 'text-xs font-normal text-muted-foreground'
 const LINK = 'inline-flex items-center gap-1 underline underline-offset-4'
+const SELECT =
+  'h-8 w-full rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
 
 export function ConnectionsForm({
   config,
   clis,
+  codexModels,
 }: {
   config: PublicConfig
   clis: Partial<Record<AiProvider, CliStatus>>
+  codexModels: AiModelOption[] | null
 }) {
   return (
     <div className="mt-4 flex flex-col gap-4">
       <ApifySection apify={config.apify} />
-      <AiSection ai={config.ai} clis={clis} />
+      <AiSection ai={config.ai} clis={clis} codexModels={codexModels} />
       <EmailSection email={config.email} />
     </div>
   )
@@ -127,9 +133,11 @@ const withPrice = (model: string) => {
 function AiSection({
   ai,
   clis,
+  codexModels,
 }: {
   ai: PublicConfig['ai']
   clis: Partial<Record<AiProvider, CliStatus>>
+  codexModels: AiModelOption[] | null
 }) {
   const [provider, setProvider] = useState<AiProvider>(
     ai?.provider ?? 'anthropic',
@@ -147,6 +155,18 @@ function AiSection({
   )
   const [saving, runSave] = useAction()
   const [testing, runTest] = useAction()
+
+  const modelOptions =
+    provider === 'codex'
+      ? (codexModels ?? [])
+      : info.models.map((value) => ({ value, label: withPrice(value) }))
+  const activeModel = (model: string) =>
+    provider === 'codex' ? availableCodexModel(model, codexModels) : model
+  const unavailableSavedModel =
+    sameProvider &&
+    [ai.analyzeModel, ai.writeModel].some(
+      (model) => model !== activeModel(model),
+    )
 
   const choose = (value: AiProvider) => {
     setProvider(value)
@@ -180,7 +200,13 @@ function AiSection({
         onSubmit={(event) => {
           event.preventDefault()
           runSave(
-            () => saveAiConfig({ provider, apiKey, analyzeModel, writeModel }),
+            () =>
+              saveAiConfig({
+                provider,
+                apiKey,
+                analyzeModel: activeModel(analyzeModel),
+                writeModel: activeModel(writeModel),
+              }),
             { success: 'IA salva', onDone: () => setApiKey('') },
           )
         }}
@@ -190,7 +216,7 @@ function AiSection({
           <select
             value={provider}
             onChange={(event) => choose(event.target.value as AiProvider)}
-            className="h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className={SELECT}
           >
             <optgroup label="Com chave de API">{options('api')}</optgroup>
             <optgroup label="Com a sua assinatura (CLI)">
@@ -271,37 +297,34 @@ function AiSection({
           </label>
         )}
 
-        <label className={LABEL}>
-          Modelo para analisar os posts
-          <Input
-            value={analyzeModel}
-            onChange={(event) => setAnalyzeModel(event.target.value)}
-            list={`models-${provider}`}
-            placeholder={isCli ? 'Padrão do CLI' : undefined}
-            className="bg-background font-mono text-xs"
-          />
-          <span className={HINT}>
-            Lê muitos posts: um modelo rápido e barato basta.
-          </span>
-        </label>
-        <label className={LABEL}>
-          Modelo para escrever os e-mails
-          <Input
-            value={writeModel}
-            onChange={(event) => setWriteModel(event.target.value)}
-            list={`models-${provider}`}
-            placeholder={isCli ? 'Padrão do CLI' : undefined}
-            className="bg-background font-mono text-xs"
-          />
-          <span className={HINT}>Poucos e-mails: vale um modelo melhor.</span>
-        </label>
-        <datalist id={`models-${provider}`}>
-          {info.suggestions.map((model) => (
-            <option key={model} value={model}>
-              {withPrice(model)}
-            </option>
-          ))}
-        </datalist>
+        <ModelField
+          label="Modelo para analisar os posts"
+          hint="Lê muitos posts. Um modelo rápido e barato basta."
+          value={activeModel(analyzeModel) || info.defaults.analyze}
+          onChange={setAnalyzeModel}
+          options={modelOptions}
+          hasCliDefault={!info.defaults.analyze}
+        />
+        <ModelField
+          label="Modelo para escrever os e-mails"
+          hint="Para escrever os e-mails, vale escolher um modelo mais capaz."
+          value={activeModel(writeModel) || info.defaults.write}
+          onChange={setWriteModel}
+          options={modelOptions}
+          hasCliDefault={!info.defaults.write}
+        />
+        {unavailableSavedModel && (
+          <p className={`${HINT} sm:col-span-2`}>
+            Um ou mais modelos salvos ficaram indisponíveis. O Codex usa o
+            padrão nessas funções até você salvar outra escolha.
+          </p>
+        )}
+        {provider === 'codex' && cli?.loggedIn && codexModels === null && (
+          <p className={`${HINT} sm:col-span-2`}>
+            Não foi possível carregar os modelos do Codex. Recarregue a página
+            para tentar novamente.
+          </p>
+        )}
         <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
           <Button
             type="button"
@@ -322,6 +345,44 @@ function AiSection({
         </div>
       </form>
     </section>
+  )
+}
+
+function ModelField({
+  label,
+  hint,
+  value,
+  onChange,
+  options,
+  hasCliDefault,
+}: {
+  label: string
+  hint: string
+  value: string
+  onChange: (value: string) => void
+  options: AiModelOption[]
+  hasCliDefault: boolean
+}) {
+  return (
+    <label className={LABEL}>
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={SELECT}
+      >
+        {hasCliDefault && <option value="">Padrão do CLI</option>}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+        {value && !options.some((option) => option.value === value) && (
+          <option value={value}>{value} (salvo)</option>
+        )}
+      </select>
+      <span className={HINT}>{hint}</span>
+    </label>
   )
 }
 

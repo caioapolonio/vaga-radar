@@ -3,8 +3,13 @@ import { createGoogle } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { APICallError, generateText, Output, type LanguageModel } from 'ai'
 import { z } from 'zod'
-import { CliError, runCli } from './ai-cli'
-import { isCliProvider, providerInfo, type AiConfig } from './ai-fields'
+import { CliError, listCodexModels, runCli } from './ai-cli'
+import {
+  availableCodexModel,
+  isCliProvider,
+  providerInfo,
+  type AiConfig,
+} from './ai-fields'
 import { readAppConfig } from './config'
 
 export type ModelRole = 'analyze' | 'write'
@@ -13,7 +18,17 @@ export async function readAiConfig(): Promise<AiConfig> {
   const { ai } = await readAppConfig()
   if (!ai || (!isCliProvider(ai.provider) && !ai.apiKey))
     throw new Error('Configure a IA em Ajustes > Conexões')
-  return ai
+  return resolveAiModels(ai)
+}
+
+export async function resolveAiModels(ai: AiConfig): Promise<AiConfig> {
+  if (ai.provider !== 'codex' || (!ai.analyzeModel && !ai.writeModel)) return ai
+  const catalog = await listCodexModels()
+  return {
+    ...ai,
+    analyzeModel: availableCodexModel(ai.analyzeModel, catalog),
+    writeModel: availableCodexModel(ai.writeModel, catalog),
+  }
 }
 
 // The model name as set on /ajustes; empty runs a CLI's own default

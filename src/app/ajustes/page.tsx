@@ -1,7 +1,7 @@
 import { connection } from 'next/server'
 import { ConnectionsForm } from '@/components/connections-form'
 import { SettingsForm } from '@/components/settings-form'
-import { cliStatus } from '@/lib/ai-cli'
+import { cliStatus, listCodexModels } from '@/lib/ai-cli'
 import { AI_PROVIDERS } from '@/lib/ai-fields'
 import { readPublicConfig } from '@/lib/config'
 import { readSettings } from '@/lib/settings'
@@ -9,7 +9,7 @@ import { readSettings } from '@/lib/settings'
 export default async function SettingsPage() {
   // Always read the saved files instead of a build-time snapshot
   await connection()
-  const [settings, config, clis] = await Promise.all([
+  const [settings, config, clis, codexModels] = await Promise.all([
     readSettings(),
     readPublicConfig(),
     // Which agent CLIs are installed and logged in, for the AI section
@@ -18,6 +18,7 @@ export default async function SettingsPage() {
         async ({ value }) => [value, await cliStatus(value)] as const,
       ),
     ).then(Object.fromEntries),
+    listCodexModels(),
   ])
 
   return (
@@ -34,6 +35,7 @@ export default async function SettingsPage() {
         key={JSON.stringify(config)}
         config={config}
         clis={clis}
+        codexModels={codexModels}
       />
 
       <h2 className="mt-10 text-sm font-semibold">Limites</h2>

@@ -2,7 +2,13 @@ import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
-import { providerInfo, type AiProvider, type CliStatus } from './ai-fields'
+import { createInterface } from 'node:readline'
+import {
+  providerInfo,
+  type AiModelOption,
+  type AiProvider,
+  type CliStatus,
+} from './ai-fields'
 import type { ModelRole } from './ai'
 
 // The agent CLIs (Claude Code, Codex, Gemini CLI) run headless with the
@@ -86,6 +92,94 @@ async function emptyDir() {
   return dir
 }
 
+type CodexModel = {
+  model: string
+  displayName: string
+  hidden?: boolean
+  inputModalities?: string[]
+}
+
+async function discoverCodexModels(): Promise<AiModelOption[] | null> {
+  const child = spawn(
+    'codex',
+    ['app-server', '-c', 'model_provider="openai"'],
+    {
+      cwd: await emptyDir(),
+      env: cliEnv('codex'),
+      stdio: ['pipe', 'pipe', 'ignore'],
+      timeout: 8_000,
+    },
+  )
+  const lines = createInterface({ input: child.stdout })
+  child.on('error', () => lines.close())
+  child.stdin.on('error', () => lines.close())
+
+  const send = (message: object) =>
+    child.stdin.write(`${JSON.stringify(message)}\n`)
+  let requestId = 1
+  const models = new Map<string, AiModelOption>()
+  try {
+    send({
+      id: requestId,
+      method: 'initialize',
+      params: { clientInfo: { name: 'vaga_radar', version: '0.1.0' } },
+    })
+    for await (const line of lines) {
+      const reply = JSON.parse(line) as {
+        id?: number
+        error?: unknown
+        result?: { data?: CodexModel[]; nextCursor?: string | null }
+      }
+      if (reply.id !== requestId) continue
+      if (reply.error) return null
+
+      let cursor: string | undefined
+      if (requestId === 1) {
+        send({ method: 'initialized', params: {} })
+      } else {
+        if (!Array.isArray(reply.result?.data)) return null
+        for (const entry of reply.result.data) {
+          if (entry.hidden || entry.inputModalities?.includes('text') === false)
+            continue
+          models.set(entry.model, {
+            value: entry.model,
+            label: entry.displayName || entry.model,
+          })
+        }
+        cursor = reply.result.nextCursor ?? undefined
+        if (!cursor) return [...models.values()]
+      }
+      send({
+        id: ++requestId,
+        method: 'model/list',
+        params: { limit: 100, includeHidden: false, cursor },
+      })
+    }
+    return null
+  } finally {
+    lines.close()
+    child.kill()
+  }
+}
+
+let codexCatalog: {
+  expiresAt: number
+  request: Promise<AiModelOption[] | null>
+} | null = null
+
+export function listCodexModels() {
+  if (codexCatalog && codexCatalog.expiresAt > Date.now())
+    return codexCatalog.request
+
+  const request = discoverCodexModels().catch(() => null)
+  const cached = { expiresAt: Date.now() + 60_000, request }
+  codexCatalog = cached
+  void request.then((models) => {
+    if (!models) cached.expiresAt = Date.now() + 5_000
+  })
+  return request
+}
+
 const firstLine = (text: string) =>
   text.trim().split('\n').at(-1)?.slice(0, 300) ?? ''
 
@@ -144,6 +238,10 @@ export async function cliStatus(provider: AiProvider): Promise<CliStatus> {
 
 // Messages from the CLIs that no retry fixes
 const FATAL = [
+  {
+    test: /model_not_found|model.*not supported when using Codex/i,
+    message: 'Modelo indisponível. Escolha outro em Ajustes > Conexões > IA.',
+  },
   {
     test: /not logged in|please run \/login|invalid api key|login required|unauthorized|authenticat/i,
     message:

@@ -8,7 +8,7 @@ type ProviderInfo = {
   kind: 'api' | 'cli'
   // Empty runs the CLI's own default model
   defaults: { analyze: string; write: string }
-  suggestions: readonly string[]
+  models: readonly string[]
   keyUrl?: string
   keyPlaceholder?: string
   envVar?: string
@@ -26,7 +26,7 @@ export const AI_PROVIDERS = [
     keyPlaceholder: 'sk-ant-…',
     envVar: 'ANTHROPIC_API_KEY',
     defaults: { analyze: 'claude-haiku-4-5', write: 'claude-sonnet-5-5' },
-    suggestions: ['claude-haiku-4-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
+    models: ['claude-haiku-4-5', 'claude-sonnet-5-5', 'claude-opus-5-5'],
   },
   {
     value: 'openai',
@@ -36,7 +36,7 @@ export const AI_PROVIDERS = [
     keyPlaceholder: 'sk-…',
     envVar: 'OPENAI_API_KEY',
     defaults: { analyze: 'gpt-5.4-mini', write: 'gpt-5.5' },
-    suggestions: ['gpt-5.4-nano', 'gpt-5.4-mini', 'gpt-5.5'],
+    models: ['gpt-5.4-nano', 'gpt-5.4-mini', 'gpt-5.5'],
   },
   {
     value: 'google',
@@ -46,7 +46,7 @@ export const AI_PROVIDERS = [
     keyPlaceholder: 'AIza…',
     envVar: 'GOOGLE_GENERATIVE_AI_API_KEY',
     defaults: { analyze: 'gemini-flash-latest', write: 'gemini-flash-latest' },
-    suggestions: [
+    models: [
       'gemini-flash-lite-latest',
       'gemini-flash-latest',
       'gemini-pro-latest',
@@ -60,7 +60,7 @@ export const AI_PROVIDERS = [
     installUrl: 'https://code.claude.com/docs',
     loginHint: 'Rode claude no terminal e entre com sua conta',
     defaults: { analyze: 'haiku', write: 'sonnet' },
-    suggestions: ['haiku', 'sonnet', 'opus'],
+    models: ['haiku', 'sonnet', 'opus'],
   },
   {
     value: 'codex',
@@ -70,7 +70,7 @@ export const AI_PROVIDERS = [
     installUrl: 'https://developers.openai.com/codex/cli',
     loginHint: 'Rode codex login no terminal',
     defaults: { analyze: '', write: '' },
-    suggestions: ['gpt-5.4-mini', 'gpt-5.5'],
+    models: [],
   },
   {
     value: 'gemini-cli',
@@ -80,11 +80,19 @@ export const AI_PROVIDERS = [
     installUrl: 'https://github.com/google-gemini/gemini-cli',
     loginHint: 'Rode gemini no terminal e entre com sua conta Google',
     defaults: { analyze: '', write: '' },
-    suggestions: ['gemini-flash-latest', 'gemini-pro-latest'],
+    models: ['gemini-flash-latest', 'gemini-pro-latest'],
   },
 ] as const satisfies readonly ProviderInfo[]
 
 export type AiProvider = (typeof AI_PROVIDERS)[number]['value']
+
+export type AiModelOption = { value: string; label: string }
+
+// Only replace a saved model when the Codex catalog confirms its absence.
+export const availableCodexModel = (
+  model: string,
+  catalog: readonly AiModelOption[] | null,
+) => (catalog && !catalog.some(({ value }) => value === model) ? '' : model)
 
 export type AiConfig = {
   provider: AiProvider

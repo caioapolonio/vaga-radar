@@ -1,4 +1,4 @@
-import { modelFor, modelLabel } from '../ai'
+import { modelFor, modelLabel, resolveAiModels } from '../ai'
 import { costUsd, isCliProvider } from '../ai-fields'
 import { readAppConfig } from '../config'
 import { readSettings } from '../settings'
@@ -9,8 +9,8 @@ export type AnalysisOverview = Awaited<ReturnType<typeof analysisOverview>>
 
 // The running job, if any, and what a new run would read and cost
 export async function analysisOverview(kind: AnalysisKind, reanalyze = false) {
-  const [{ ai }, estimate, settings] = await Promise.all([
-    readAppConfig(),
+  const [ai, estimate, settings] = await Promise.all([
+    readAppConfig().then(({ ai }) => ai && resolveAiModels(ai)),
     analysisEstimate(kind, reanalyze),
     readSettings(),
   ])
