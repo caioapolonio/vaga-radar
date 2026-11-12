@@ -39,6 +39,7 @@ export function FeedProvider({
   linkIndex,
   searchLabels,
   jobPosts = {},
+  jobEmailStatuses = {},
   children,
 }: {
   linkIndex: LinkIndex
@@ -46,6 +47,8 @@ export function FeedProvider({
   // Para você shows one card per job: shown post id -> every post of the job,
   // so marking the card marks them all
   jobPosts?: Record<string, string[]>
+  // An email sent or discarded still counts after clearing a manual mark
+  jobEmailStatuses?: Record<string, PostStatus>
   children: React.ReactNode
 }) {
   const [statuses, setStatuses] = useState<Record<string, PostStatus | null>>(
@@ -53,8 +56,12 @@ export function FeedProvider({
   )
   const [links, setLinks] = useState(linkIndex)
 
-  const statusOf = (post: Post) =>
-    post.id in statuses ? (statuses[post.id] ?? undefined) : post.status
+  const statusOf = (post: Post): PostStatus | undefined => {
+    const status = post.id in statuses ? statuses[post.id] : post.status
+    const emailStatus = jobEmailStatuses[post.id]
+    if (status === 'applied' || emailStatus === 'applied') return 'applied'
+    return status ?? emailStatus
+  }
 
   const setStatus = (post: Post, status: PostStatus | null) => {
     const at = new Date().toISOString()

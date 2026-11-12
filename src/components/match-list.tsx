@@ -1,7 +1,7 @@
 'use client'
 
 import { LinkIcon, MailIcon } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { Presence } from '@/lib/feed-filters'
@@ -19,6 +19,7 @@ import { STRENGTHS } from '@/lib/match-strength'
 import type { MatchVerdict } from '@/lib/matches'
 import type { Post } from '@/lib/store'
 import { foldText, hasTerms, queryTerms } from '@/lib/text-search'
+import { useFeed } from './feed-provider'
 import {
   FilterSelect,
   FilterSummary,
@@ -37,11 +38,9 @@ export type MatchJob = {
   emailCard: JobEmailCard | null
   // Why E-mails wrote no card for a post with an address
   noEmailCard: string | null
-  status: JobStatus
 }
 
-// From the marks on the job's posts and its email card: applied wins over seen
-export type JobStatus = 'open' | 'seen' | 'applied'
+type JobStatus = 'open' | 'seen' | 'applied'
 
 const STATUS_TABS: { value: JobStatus; label: string; empty: string }[] = [
   { value: 'open', label: 'Para aplicar', empty: '' },
@@ -102,16 +101,21 @@ const isFiltered = (filters: Filters) =>
 
 export function MatchList({
   jobs,
+  analyzed,
+  children,
   city,
   localPlaces,
   emptyMessage,
 }: {
   jobs: MatchJob[]
+  analyzed: number
+  children: ReactNode
   // From /perfil, for the "Onde" filter
   city: string
   localPlaces: string[]
   emptyMessage: string
 }) {
+  const { statusOf } = useFeed()
   const [filters, setFilters] = useState(NO_FILTERS)
   const set = <K extends keyof Filters>(name: K, value: Filters[K]) =>
     setFilters((current) => ({ ...current, [name]: value }))
@@ -147,11 +151,14 @@ export function MatchList({
   )
   type Indexed = (typeof indexed)[number]
 
+  const jobStatus = (job: Indexed): JobStatus => statusOf(job.post) ?? 'open'
+  const open = indexed.filter((job) => jobStatus(job) === 'open')
+  const strong = open.filter(({ verdict }) => verdict.strength === 3).length
   const terms = queryTerms(filters.q)
   // Every filter but `skip`, so each option can show how many jobs it leaves
   const passes = (job: Indexed, skip?: keyof Filters) =>
     (skip === 'q' || hasTerms(job.text, terms)) &&
-    (skip === 'status' || job.status === filters.status) &&
+    (skip === 'status' || jobStatus(job) === filters.status) &&
     (skip === 'strength' ||
       filters.strength === 'all' ||
       job.strength === filters.strength) &&
@@ -172,7 +179,7 @@ export function MatchList({
     indexed.filter((job) => passes(job, skip) && belongs(job)).length
 
   const visible = indexed.filter((job) => passes(job))
-  const inStatus = indexed.filter((job) => job.status === filters.status).length
+  const inStatus = indexed.filter((job) => jobStatus(job) === filters.status).length
   const filtered = isFiltered(filters)
 
   const options = <K extends string>(
@@ -209,6 +216,16 @@ export function MatchList({
 
   return (
     <>
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Vagas para você
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {open.length} para aplicar ({strong}{' '}
+          {strong === 1 ? 'forte' : 'fortes'}) · {analyzed} analisadas
+        </p>
+      </header>
+      {children}
       <div className="mt-6 flex flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Tabs
@@ -220,7 +237,7 @@ export function MatchList({
                 <TabsTrigger key={value} value={value}>
                   {label}{' '}
                   <span className="text-muted-foreground tabular-nums">
-                    {count('status', (job) => job.status === value)}
+                    {count('status', (job) => jobStatus(job) === value)}
                   </span>
                 </TabsTrigger>
               ))}

@@ -1,11 +1,7 @@
 import { connection } from 'next/server'
 import { AnalysisPanel } from '@/components/analysis-panel'
 import { FeedProvider } from '@/components/feed-provider'
-import {
-  MatchList,
-  type JobStatus,
-  type MatchJob,
-} from '@/components/match-list'
+import { MatchList, type MatchJob } from '@/components/match-list'
 import { analysisOverview } from '@/lib/analysis/overview'
 import { applyButtonUrl, buildLinkIndex } from '@/lib/links'
 import { readMatches, untriagedForMatch } from '@/lib/matches'
@@ -14,7 +10,7 @@ import { localPlaces, readProfile } from '@/lib/profile'
 import { readSearchConfig, searchLabels } from '@/lib/searches'
 import { readSettings, triageCutoff } from '@/lib/settings'
 import { triageWindowLabel } from '@/lib/settings-fields'
-import { readStore, type Post } from '@/lib/store'
+import { readStore, type Post, type PostStatus } from '@/lib/store'
 
 const normalize = (text: string) =>
   text
@@ -94,23 +90,15 @@ export default async function ForYouPage() {
     ...job,
     ...emailOf([job.post, ...job.others]),
   }))
-  // Marking any of the posts counts for the job, and so does its email card;
-  // applied wins over seen
-  const statusOf = ({
+  // Marking any of the posts counts for the job; applied wins over seen
+  const postStatusOf = ({
     post,
     others,
-    emailCard,
-  }: (typeof grouped)[number]): JobStatus => {
+  }: (typeof grouped)[number]): PostStatus | undefined => {
     const statuses = [post, ...others].map(({ status }) => status)
-    return statuses.includes('applied') || emailCard?.status === 'sent'
-      ? 'applied'
-      : statuses.includes('seen') || emailCard?.status === 'discarded'
-        ? 'seen'
-        : 'open'
+    return statuses.includes('applied') ? 'applied' : statuses.find(Boolean)
   }
 
-  const open = grouped.filter((job) => statusOf(job) === 'open')
-  const strong = open.filter(({ verdict }) => verdict.strength === 3).length
   const analyzed = Object.keys(matches.triaged).length
   const waiting = untriagedForMatch(
     store,
@@ -120,29 +108,6 @@ export default async function ForYouPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 pt-6 pb-8 sm:pb-12">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Vagas para você
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {open.length} para aplicar ({strong}{' '}
-          {strong === 1 ? 'forte' : 'fortes'}) · {analyzed} analisadas
-        </p>
-      </header>
-      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-        A IA lê os posts {triageWindowLabel(settings)} (mude em Ajustes), de
-        todos os grupos, e deixa aqui só as vagas que combinam com o seu perfil.
-        Rode depois de cada pesquisa. Vagas que você marcar como Já vi ou
-        Apliquei, ou cujo e-mail enviar ou descartar em E-mails, mudam de aba
-        quando a página recarrega.
-      </p>
-      <AnalysisPanel
-        kind="matches"
-        initial={await analysisOverview('matches')}
-        actionLabel="Analisar com IA"
-        found={['vaga combina', 'vagas combinam']}
-      />
-
       {/* Keyed by the last search so local marks start fresh after one */}
       <FeedProvider
         key={store.lastSearchedAt ?? 'never'}
@@ -156,28 +121,27 @@ export default async function ForYouPage() {
               [post.id, ...others.map(({ id }) => id)],
             ]),
         )}
+        jobEmailStatuses={Object.fromEntries(
+          grouped.flatMap<[string, PostStatus]>(({ post, emailCard }) => {
+            if (emailCard?.status === 'sent') return [[post.id, 'applied']]
+            if (emailCard?.status === 'discarded') return [[post.id, 'seen']]
+            return []
+          }),
+        )}
       >
         <MatchList
-          jobs={grouped.map((job) => {
-            const status = statusOf(job)
-            return {
-              // The card shows the job's status, which may come from another
-              // of its posts or from its email card
-              post: {
-                ...job.post,
-                status: status === 'open' ? undefined : status,
-              },
-              // Candidatar-se only for a post with a single link
-              verdict: {
-                ...job.verdict,
-                applyUrl: applyButtonUrl(job.post, job.verdict.applyUrl),
-              },
-              others: job.others.length,
-              emailCard: job.emailCard,
-              noEmailCard: job.noEmailCard,
-              status,
-            }
-          })}
+          jobs={grouped.map((job) => ({
+            post: { ...job.post, status: postStatusOf(job) },
+            // Candidatar-se only for a post with a single link
+            verdict: {
+              ...job.verdict,
+              applyUrl: applyButtonUrl(job.post, job.verdict.applyUrl),
+            },
+            others: job.others.length,
+            emailCard: job.emailCard,
+            noEmailCard: job.noEmailCard,
+          }))}
+          analyzed={analyzed}
           city={profile.city}
           localPlaces={localPlaces(profile)}
           emptyMessage={`Nenhuma vaga filtrada ainda. ${
@@ -185,7 +149,20 @@ export default async function ForYouPage() {
               ? `Clique em Analisar com IA para ler os ${waiting} posts.`
               : 'Pesquise vagas para ter posts novos.'
           }`}
-        />
+        >
+          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+            A IA lê os posts {triageWindowLabel(settings)} (mude em Ajustes),
+            de todos os grupos, e deixa aqui só as vagas que combinam com o seu
+            perfil. Rode depois de cada pesquisa. Ao abrir ou marcar uma vaga,
+            ela muda de aba na hora.
+          </p>
+          <AnalysisPanel
+            kind="matches"
+            initial={await analysisOverview('matches')}
+            actionLabel="Analisar com IA"
+            found={['vaga combina', 'vagas combinam']}
+          />
+        </MatchList>
       </FeedProvider>
     </main>
   )

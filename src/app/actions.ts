@@ -1,8 +1,10 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
 import { normalizeUrl } from '@/lib/links'
 import { updateStore, type Post, type PostStatus } from '@/lib/store'
+
+// FeedProvider updates the visible cards. Both feed pages read the store
+// on request, so these writes don't need to render a new page in the response.
 
 // undefined fields are dropped when the store is serialized
 const withStatus = (post: Post, status: PostStatus | null): Post => ({
@@ -23,7 +25,6 @@ export async function setPostStatus(
       ids.has(post.id) ? withStatus(post, status) : post,
     ),
   }))
-  revalidatePath('/')
 }
 
 export async function markLinkOpened(postId: string, url: string) {
@@ -38,5 +39,4 @@ export async function markLinkOpened(postId: string, url: string) {
         : post,
     ),
   }))
-  revalidatePath('/')
 }
